@@ -32,23 +32,10 @@ jobs:
         git submodule update --checkout
         printf "r%s.%s" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)" > /tmp/rev
         echo "::set-output name=revision::$(cat /tmp/rev)"
-
-    - name: Compare GitHub and AUR PKGBUILD
-      id: compare
-      run: |
-        curl -sL https://aur.archlinux.org/cgit/aur.git/plain/PKGBUILD?h=xenia-bin > /tmp/PKGBUILD.aur
-        PKGVER=$(sed -n "s/^pkgver=\(.\+\)/\1/p" PKGBUILD)
-        if [[ "${PKGVER}" != "${{ steps.clone.outputs.revision }}" ]]; then 
-        sed -i "s/^pkgrel=\([0-9]\+\)/pkgrel=0/" PKGBUILD
-        sed -i "s/^pkgver=\(.*\)/pkgver=${{ steps.clone.outputs.revision }}/" PKGBUILD
-        fi
-        diff /tmp/PKGBUILD.aur PKGBUILD; [[ $? != 0 ]]
-      continue-on-error: true
-
     - name: Build Xenia
       id: build
       run: |
-        cd xenia && ./xenia-build build --config=${CONFIG}
+        cd xenia && ./xb build --config=${CONFIG}
       env:
         CXX: clang++-9
         CC: clang-9
@@ -81,33 +68,6 @@ jobs:
         name: xenia.${{ steps.clone.outputs.revision }}
         path: artifact
       if: steps.pack.outcome == 'success'
-
-    - name: Update GitHub Repo
-      id: update
-      run: |
-        git checkout ${GITHUB_HEAD_REF:-${GITHUB_REF##*/}}
-        PKGREL=$(sed -n "s/^pkgrel=\([0-9]\+\)/\1/p" PKGBUILD)
-        PKGREL=$((${PKGREL} + 1))
-        sed -i "s/^pkgrel=\([0-9]\+\)/pkgrel=${PKGREL}/" PKGBUILD
-        sed -i "s/^sha256sums=('.*')/sha256sums=('${{ steps.pack.outputs.sha256sum }}')/" PKGBUILD
-        sed -i "s,^source=('.*'),source=('"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"/releases/download/${{ steps.clone.outputs.revision }}/xenia.${{ steps.clone.outputs.revision }}.tar.xz')," PKGBUILD
-        git add PKGBUILD
-        CNAME="$(git log -1 --pretty=format:%aN | cat)"
-        CEMAIL="$(git log -1 --pretty=format:%aE | cat)"
-        git config --global user.email "${CEMAIL}"
-        git config --global user.name "${CNAME}"
-        git -c user.name="${CNAME}" -c user.email="${CEMAIL}" commit -m "[auto]: update to rev ${{ steps.clone.outputs.revision }}"
-        git push
-        git push --delete origin ${{ steps.clone.outputs.revision }} >&/dev/null || true
-        git tag -a ${{ steps.clone.outputs.revision }} -m "Update to rev ${{ steps.clone.outputs.revision }}"
-        git push --tags
-      env:
-        AUR_CO_PATH: /tmp/aur-xenia-bin
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      if: |
-        steps.upload_artifact.outcome == 'success' && 
-        github.ref == 'refs/heads/master'
-
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
