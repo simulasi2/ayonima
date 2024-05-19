@@ -41,7 +41,6 @@ jobs:
         CC: clang-9
         AR: llvm-ar-9
         CONFIG: Release
-      if: steps.compare.outcome == 'success'
 
     - name: Compress Binaries
       id: compress
