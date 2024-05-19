@@ -8,9 +8,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-18.04
-    if: "!contains(github.event.head_commit.message, '[auto]: ')"
-
+    runs-on: ubuntu-20.04
     steps:
     - name: Checkout Main Repo
       uses: actions/checkout@v2
@@ -139,46 +137,3 @@ jobs:
         asset_name: xenia.${{ steps.clone.outputs.revision }}.tar.xz
         asset_content_type: application/x-xz
       if: steps.create_release.outcome == 'success'
-
-    - name: Update AUR
-      id: aur
-      run: |
-        mkdir -p ~/.ssh
-        ssh-keyscan -t rsa,dsa,ecdsa,ed25519 aur.archlinux.org >> ~/.ssh/known_hosts
-        echo "${{ secrets.AUR_SSH_PRIVATE_KEY }}" > ~/.ssh/aur
-        chmod 600 ~/.ssh/aur
-        ssh-keygen -y -f ~/.ssh/aur > ~/.ssh/aur.pub
-        echo >> ~/.ssh/config
-        echo 'Host aur.archlinux.org' >> ~/.ssh/config
-        echo '  IdentityFile ~/.ssh/aur' >> ~/.ssh/config
-        echo '  User aur' >> ~/.ssh/config
-        mkdir -p ${AUR_CO_PATH} && cd $_
-        git clone git+ssh://aur@aur.archlinux.org/xenia-bin.git .
-        \cp ${GITHUB_WORKSPACE}/PKGBUILD .
-        git status
-        makepkg --printsrcinfo > .SRCINFO
-        git add PKGBUILD .SRCINFO
-        git config user.name hmk
-        git config user.email hmk@user.local
-        git commit -m "Update to rev ${{ steps.clone.outputs.revision }}"
-        cat PKGBUILD
-        cat .SRCINFO
-        git push
-      env:
-        AUR_CO_PATH: /tmp/aur-xenia-bin
-        SSH_AUTH_SOCK: /tmp/ssh_agent.sock
-        XZ_SHA256SUM: ${{ steps.pack.sha256sum }}
-        XZ_URL: ${{ steps.create_release.outputs.upload_url }}
-      if: steps.upload_release_asset.outcome == 'success'
-
-    - name: Add PKGBUILD to Release
-      id: upload_release_pkgbuild
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./PKGBUILD
-        asset_name: PKGBUILD
-        asset_content_type: text/plain
-      if: steps.aur.outcome == 'success'
